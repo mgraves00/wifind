@@ -125,9 +125,12 @@ while IFS=: read -- _ssid _pass _opts; do
 	if find_ssid $_ssid "$_active_wifi"; then
 		ifconfig $_if -nwid -nwkey 2>/dev/null
 		ifconfig $_if -wpa 2>/dev/null
-		ifconfig $_if nwid $_ssid wpa wpakey $_pass $_opts 2>/dev/null || \
-			dprint "error enabling $_ssid on $_if"; && \
+		ifconfig $_if nwid $_ssid wpa wpakey $_pass $_opts 2>/dev/null
+	       	if [ $? -eq 0 ]; then
 			dprint "connected to $_ssid on $_if"
+		else
+			dprint "error enabling $_ssid on $_if"
+		fi
 		break
 	fi
 done
