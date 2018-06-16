@@ -51,7 +51,7 @@ addel() {
 
 scan_wifi() {
 	local _if=$1 _ssids
-	_ssids=`ifconfig $_if scan | sed -nr -e 's/^[	 ]+nwid\ ([^ ]+)\ .*$/\1/p' | sed -r -e /\"\"/d`
+	_ssids=`ifconfig $_if scan | sed -nr -e 's/^[	 ]+nwid\ ([^ ]+)\ .+([w][ep][ap]).*$/\1:\2/p' | sed -r -e /\"\"/d`
 	echo $_ssids
 }
 
@@ -72,7 +72,13 @@ check_file() {
 find_ssid() {
 	local _a=$1 _b
 	shift
-	isin $_a $* && return 0
+	for _b; do
+		echo $_b
+		if [ $_a == "${_b%%:*}" ]; then
+			echo $_b
+			return 0
+		fi
+	done
 	return 1
 }
 
@@ -82,8 +88,7 @@ usage() {
 }
 
 #### 
-
-CFG=/etc/wifind
+CFG=/etc/wifind.conf
 DEBUG=0
 DEBUG_LOG="/tmp/wifind.log"
 args=`getopt df: $*`
@@ -103,14 +108,14 @@ while [ $# -ne 0 ]; do
 	esac
 done
 
-check_file $CFG || exit 1
-
 if [ $# -lt 1 ]; then
 	dprint "no interface specified"
 	usage
 	# not reached
 fi
 _if=$1; shift
+
+check_file $CFG || exit 1
 
 # Make sure interface is up
 ifconfig $_if up 2>/dev/null
@@ -122,10 +127,20 @@ if [ ${#_active_wifi} -eq 0 ]; then
 fi
 stripcom $CFG | \
 while IFS=: read -- _ssid _pass _opts; do
-	if find_ssid $_ssid "$_active_wifi"; then
+	found=$(find_ssid $_ssid $_active_wifi)
+	if [ $? -eq 0 ]; then
 		ifconfig $_if -nwid -nwkey 2>/dev/null
-		ifconfig $_if -wpa 2>/dev/null
-		ifconfig $_if nwid $_ssid wpa wpakey $_pass $_opts 2>/dev/null
+		case "$found" in
+			*:wpa)
+				ifconfig $_if -wpa 2>/dev/null
+				_security="wpa wpakey $_pass"
+				;;
+			*:wep)
+				ifconfig $_if -nwkey 2>/dev/null
+				_security="nwkey $_pass"
+				;;
+		esac
+		ifconfig $_if nwid $_ssid $_security $_opts 2>/dev/null
 	       	if [ $? -eq 0 ]; then
 			dprint "connected to $_ssid on $_if"
 		else
